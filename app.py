@@ -893,14 +893,34 @@ if not st.session_state.settings_tab:
         Returns:
             변환된 스크립트
         """
+        # API 키 가져오기 개선
         if not api_key:
-            return "OpenAI API 키가 설정되지 않았습니다."
-        
+            # 여러 방법으로 API 키 가져오기 시도
+            try:
+                # 방법 1: 직접 secrets에서 가져오기
+                if 'openai_api_key' in st.secrets:
+                    api_key = st.secrets['openai_api_key']
+                    logger.info("OpenAI API 키를 Streamlit Secrets에서 직접 가져왔습니다.")
+                # 방법 2: 중첩된 딕셔너리에서 가져오기
+                elif 'openai' in st.secrets and 'api_key' in st.secrets['openai']:
+                    api_key = st.secrets['openai']['api_key']
+                    logger.info("OpenAI API 키를 Streamlit Secrets의 중첩 딕셔너리에서 가져왔습니다.")
+                # 방법 3: 세션 상태에서 가져오기
+                elif st.session_state.get("openai_api_key"):
+                    api_key = st.session_state.openai_api_key
+                    logger.info("OpenAI API 키를 세션 상태에서 가져왔습니다.")
+                else:
+                    logger.warning("OpenAI API 키를 찾을 수 없습니다.")
+                    return "OpenAI API 키가 설정되지 않았습니다. API 키를 설정해주세요."
+            except Exception as e:
+                logger.error(f"API 키 로드 오류: {str(e)}")
+                return f"API 키 로드 중 오류가 발생했습니다: {str(e)}"
+
         try:
             import openai
             
-            # OpenAI API 설정
-            openai.api_key = api_key
+            # API 키 로깅 (앞/뒤 일부만 표시)
+            logger.info(f"API 키 설정: {api_key[:4]}...{api_key[-4:] if len(api_key) > 8 else ''}")
             
             # 최소 길이 요구사항 설정 (최대 길이의 70%)
             min_duration = max(max_duration * 0.7, 30)  # 최소 30초 또는 최대 길이의 70%
@@ -947,9 +967,10 @@ if not st.session_state.settings_tab:
                 
                 # API 호출
                 try:
-                    # 최신 OpenAI API 사용
+                    # 새로운 OpenAI API 클라이언트 생성 및 호출 (v1.0.0 이상)
                     try:
-                        client = openai.Client(api_key=api_key)
+                        from openai import OpenAI
+                        client = OpenAI(api_key=api_key)
                         response = client.chat.completions.create(
                             model="gpt-4o-mini",
                             messages=[
@@ -961,7 +982,9 @@ if not st.session_state.settings_tab:
                         )
                         script = response.choices[0].message.content.strip()
                     except Exception as e:
-                        # 구버전 API 사용 시도
+                        logger.error(f"최신 OpenAI API 호출 실패, 구버전 시도: {e}")
+                        # 구버전 API 사용 시도 (v0.28 이하)
+                        openai.api_key = api_key
                         response = openai.ChatCompletion.create(
                             model="gpt-4o-mini",
                             messages=[
@@ -1026,14 +1049,31 @@ if not st.session_state.settings_tab:
         Returns:
             키워드 리스트 (최대 10개)
         """
+        # API 키 가져오기 개선
         if not api_key:
-            return []
-        
+            # 여러 방법으로 API 키 가져오기 시도
+            try:
+                # 방법 1: 직접 secrets에서 가져오기
+                if 'openai_api_key' in st.secrets:
+                    api_key = st.secrets['openai_api_key']
+                    logger.info("OpenAI API 키를 Streamlit Secrets에서 직접 가져왔습니다.")
+                # 방법 2: 중첩된 딕셔너리에서 가져오기
+                elif 'openai' in st.secrets and 'api_key' in st.secrets['openai']:
+                    api_key = st.secrets['openai']['api_key']
+                    logger.info("OpenAI API 키를 Streamlit Secrets의 중첩 딕셔너리에서 가져왔습니다.")
+                # 방법 3: 세션 상태에서 가져오기
+                elif st.session_state.get("openai_api_key"):
+                    api_key = st.session_state.openai_api_key
+                    logger.info("OpenAI API 키를 세션 상태에서 가져왔습니다.")
+                else:
+                    logger.warning("OpenAI API 키를 찾을 수 없습니다.")
+                    return []
+            except Exception as e:
+                logger.error(f"API 키 로드 오류: {str(e)}")
+                return []
+
         try:
             import openai
-            
-            # OpenAI API 설정
-            openai.api_key = api_key
             
             # 프롬프트 구성
             prompt = """
@@ -1047,22 +1087,24 @@ if not st.session_state.settings_tab:
             
             # API 호출
             try:
-                # 최신 OpenAI API 사용
-                client = openai.Client(api_key=api_key)
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": "당신은 콘텐츠 분석 및 키워드 추출 전문가입니다."},
-                        {"role": "user", "content": prompt.format(content=content)}
-                    ],
-                    max_tokens=200,
-                    temperature=0.3
-                )
-                keywords_text = response.choices[0].message.content.strip()
-            except Exception as e:
-                # 이전 버전 방식 시도
+                # 새로운 OpenAI API 클라이언트 생성 및 호출 (v1.0.0 이상)
                 try:
-                    # 구버전 API 사용 시도
+                    from openai import OpenAI
+                    client = OpenAI(api_key=api_key)
+                    response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {"role": "system", "content": "당신은 콘텐츠 분석 및 키워드 추출 전문가입니다."},
+                            {"role": "user", "content": prompt.format(content=content)}
+                        ],
+                        max_tokens=200,
+                        temperature=0.3
+                    )
+                    keywords_text = response.choices[0].message.content.strip()
+                except Exception as e:
+                    logger.error(f"최신 OpenAI API 호출 실패, 구버전 시도: {e}")
+                    # 구버전 API 사용 시도 (v0.28 이하)
+                    openai.api_key = api_key
                     response = openai.ChatCompletion.create(
                         model="gpt-4o-mini",
                         messages=[
@@ -1073,17 +1115,19 @@ if not st.session_state.settings_tab:
                         temperature=0.3
                     )
                     keywords_text = response.choices[0].message.content.strip()
-                except Exception as fallback_error:
-                    # 모든 시도 실패
-                    raise Exception(f"OpenAI API 호출 실패: {str(fallback_error)}")
-            
-            # 쉼표로 구분된 키워드 리스트로 변환
-            keywords = [keyword.strip() for keyword in keywords_text.split(',') if keyword.strip()]
-            
-            # 최대 10개 키워드 반환
-            return keywords[:10]
+                
+                # 쉼표로 구분된 키워드 리스트로 변환
+                keywords = [keyword.strip() for keyword in keywords_text.split(',') if keyword.strip()]
+                
+                # 최대 10개 키워드 반환
+                return keywords[:10]
+                    
+            except Exception as fallback_error:
+                # 모든 시도 실패
+                raise Exception(f"OpenAI API 호출 실패: {str(fallback_error)}")
                 
         except ImportError:
+            logger.error("OpenAI 라이브러리가 설치되지 않았습니다.")
             return []
         except Exception as e:
             logger.error(f"키워드 추출 중 오류 발생: {str(e)}")
@@ -1101,15 +1145,32 @@ if not st.session_state.settings_tab:
         Returns:
             매력적인 쇼츠 제목 (영어, 특수문자, 공백 등이 파일명에 적합하게 처리됨)
         """
+        # API 키 가져오기 개선
         if not api_key:
-            return f"shorts_{int(time.time())}"
+            # 여러 방법으로 API 키 가져오기 시도
+            try:
+                # 방법 1: 직접 secrets에서 가져오기
+                if 'openai_api_key' in st.secrets:
+                    api_key = st.secrets['openai_api_key']
+                    logger.info("OpenAI API 키를 Streamlit Secrets에서 직접 가져왔습니다.")
+                # 방법 2: 중첩된 딕셔너리에서 가져오기
+                elif 'openai' in st.secrets and 'api_key' in st.secrets['openai']:
+                    api_key = st.secrets['openai']['api_key']
+                    logger.info("OpenAI API 키를 Streamlit Secrets의 중첩 딕셔너리에서 가져왔습니다.")
+                # 방법 3: 세션 상태에서 가져오기
+                elif st.session_state.get("openai_api_key"):
+                    api_key = st.session_state.openai_api_key
+                    logger.info("OpenAI API 키를 세션 상태에서 가져왔습니다.")
+                else:
+                    logger.warning("OpenAI API 키를 찾을 수 없습니다.")
+                    return f"shorts_{int(time.time())}"
+            except Exception as e:
+                logger.error(f"API 키 로드 오류: {str(e)}")
+                return f"shorts_{int(time.time())}"
         
         try:
             import openai
             import re
-            
-            # OpenAI API 설정
-            openai.api_key = api_key
             
             # 프롬프트 구성
             prompt = """
@@ -1129,22 +1190,24 @@ if not st.session_state.settings_tab:
             
             # API 호출
             try:
-                # 최신 OpenAI API 사용
-                client = openai.Client(api_key=api_key)
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": "당신은 YouTube 쇼츠 제목 작성 전문가입니다."},
-                        {"role": "user", "content": prompt.format(content=content)}
-                    ],
-                    max_tokens=50,
-                    temperature=0.7
-                )
-                title = response.choices[0].message.content.strip()
-            except Exception as e:
-                # 이전 버전 방식 시도
+                # 새로운 OpenAI API 클라이언트 생성 및 호출 (v1.0.0 이상)
                 try:
-                    # 구버전 API 사용 시도
+                    from openai import OpenAI
+                    client = OpenAI(api_key=api_key)
+                    response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {"role": "system", "content": "당신은 YouTube 쇼츠 제목 작성 전문가입니다."},
+                            {"role": "user", "content": prompt.format(content=content)}
+                        ],
+                        max_tokens=50,
+                        temperature=0.7
+                    )
+                    title = response.choices[0].message.content.strip()
+                except Exception as e:
+                    logger.error(f"최신 OpenAI API 호출 실패, 구버전 시도: {e}")
+                    # 구버전 API 사용 시도 (v0.28 이하)
+                    openai.api_key = api_key
                     response = openai.ChatCompletion.create(
                         model="gpt-4o-mini",
                         messages=[
@@ -1155,29 +1218,32 @@ if not st.session_state.settings_tab:
                         temperature=0.7
                     )
                     title = response.choices[0].message.content.strip()
-                except Exception as fallback_error:
-                    # 모든 시도 실패 시 타임스탬프 사용
+                
+                # 파일명에 적합하지 않은 문자 제거
+                # 특수문자, 공백 등을 언더스코어로 대체
+                safe_title = re.sub(r'[^\w\s가-힣ㄱ-ㅎㅏ-ㅣ]', '_', title)
+                # 공백을 언더스코어로 대체하고 중복 언더스코어 제거
+                safe_title = re.sub(r'_+', '_', safe_title.replace(' ', '_'))
+                # 언더스코어로 시작하거나 끝나는 경우 제거
+                safe_title = safe_title.strip('_')
+                
+                # 파일명 길이 제한 (최대 50자)
+                if len(safe_title) > 50:
+                    safe_title = safe_title[:50]
+                
+                # 안전장치: 제목이 비어있거나 너무 짧은 경우 기본값 사용
+                if len(safe_title) < 5:
                     return f"shorts_{int(time.time())}"
-            
-            # 파일명에 적합하지 않은 문자 제거
-            # 특수문자, 공백 등을 언더스코어로 대체
-            safe_title = re.sub(r'[^\w\s가-힣ㄱ-ㅎㅏ-ㅣ]', '_', title)
-            # 공백을 언더스코어로 대체하고 중복 언더스코어 제거
-            safe_title = re.sub(r'_+', '_', safe_title.replace(' ', '_'))
-            # 언더스코어로 시작하거나 끝나는 경우 제거
-            safe_title = safe_title.strip('_')
-            
-            # 파일명 길이 제한 (최대 50자)
-            if len(safe_title) > 50:
-                safe_title = safe_title[:50]
-            
-            # 안전장치: 제목이 비어있거나 너무 짧은 경우 기본값 사용
-            if len(safe_title) < 5:
+                
+                return safe_title
+                
+            except Exception as fallback_error:
+                # 모든 시도 실패 시 타임스탬프 사용
+                logger.error(f"제목 생성 API 호출 실패: {str(fallback_error)}")
                 return f"shorts_{int(time.time())}"
-            
-            return safe_title
-            
+                
         except ImportError:
+            logger.error("OpenAI 라이브러리가 설치되지 않았습니다.")
             return f"shorts_{int(time.time())}"
         except Exception as e:
             logger.error(f"제목 생성 중 오류 발생: {str(e)}")
