@@ -45,15 +45,9 @@ try:
     from jamendo_music_provider import JamendoMusicProvider
     from thumbnail_generator import ThumbnailGenerator
     from config import config, get_api_key
-    
-    # 로그에 성공적으로 임포트되었음을 기록
-    logger.info("모든 모듈이 성공적으로 임포트되었습니다.")
 except ImportError as e:
-    error_msg = f"모듈 가져오기 오류: {e}"
-    logger.error(error_msg)
-    st.error(error_msg)
+    st.error(f"모듈 가져오기 오류: {e}")
     st.error("필요한 모듈이 설치되지 않았거나 경로가 올바르지 않습니다.")
-    st.stop()  # 오류 발생 시 애플리케이션 실행 중단
 
 # 인터넷 연결 확인 함수 추가
 def check_internet_connection():
