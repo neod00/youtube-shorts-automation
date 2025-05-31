@@ -61,12 +61,15 @@ class YouTubeUploader:
         self.youtube = None
         self.authorized = False
     
-    def update_progress(self, message, progress_value=None):
-        """진행 상황 업데이트 (Streamlit 사용 시)"""
-        if self.progress_callback:
-            self.progress_callback(message, progress_value)
-        else:
-            logger.info(message)
+    def streamlit_progress_callback(message, progress_value=None):
+        # st.write 등으로 실제 진행 상황을 표시
+        st.write(message)
+        if progress_value is not None:
+            st.progress(progress_value)
+
+    # YouTubeUploader에 콜백 전달
+    youtube_uploader = YouTubeUploader(progress_callback=streamlit_progress_callback)
+
     
     def initialize_api(self):
         """YouTube API 초기화 및 인증"""
