@@ -22,6 +22,28 @@ import socket
 import re
 import importlib.util
 
+# app-git.py 파일 상단에 추가
+try:
+    import nltk
+    
+    # 필요한 NLTK 리소스 다운로드
+    nltk.download('punkt')
+    nltk.download('averaged_perceptron_tagger')
+    nltk.download('maxent_ne_chunker')
+    nltk.download('words')
+    
+    # 특수한 punkt_tab 리소스 문제 해결 시도
+    try:
+        nltk.download('punkt_tab')
+    except:
+        # punkt_tab이 없는 경우 punkt로 대체
+        logger.warning("punkt_tab 리소스를 찾을 수 없습니다. punkt를 대신 사용합니다.")
+        
+    logger.info("NLTK 리소스 다운로드 완료")
+except Exception as e:
+    logger.error(f"NLTK 리소스 다운로드 실패: {e}")
+    st.error(f"NLTK 리소스 다운로드 실패: {e}")
+
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
