@@ -20,7 +20,8 @@ logger = logging.getLogger('youtube_uploader')
 class YouTubeUploader:
     """YouTube 업로더 클래스 - Streamlit 버전"""
     
-    def __init__(self, client_secret_file=None, credentials_file=None, progress_callback=None):
+    def __init__(self, progress_callback=None):
+        self.progress_callback = progress_callback
         """
         YouTubeUploader 초기화
         
