@@ -13,3 +13,5 @@ openai
 pyttsx3
 bs4
 nltk
+beautifulsoup4
+requests
