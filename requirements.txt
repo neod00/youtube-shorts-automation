@@ -1,6 +1,6 @@
 streamlit==1.27.0
 pandas==2.0.3
-pillow==9.4.0
+pillow>=7.1.0,<10
 numpy
 requests
 Pillow
