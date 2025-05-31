@@ -20,6 +20,7 @@ import base64
 from PIL import Image
 import socket
 import re
+import importlib.util
 
 # 로깅 설정
 logging.basicConfig(
@@ -34,45 +35,6 @@ logger = logging.getLogger('app')
 # 모듈 경로 설정
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(script_dir)
-
-# 필요한 모듈 가져오기
-try:
-    from video_creator import VideoCreator
-    from tts_generator import TTSGenerator
-    from youtube_uploader import YouTubeUploader
-    
-    # Secrets에서 클라이언트 시크릿 정보 가져오기
-    client_secret = None
-    if 'google_api' in st.secrets and 'client_secret' in st.secrets['google_api']:
-        # Secrets에서 클라이언트 시크릿 정보를 임시 파일로 저장
-        import json
-        import tempfile
-        
-        client_secret_data = st.secrets['google_api']['client_secret']
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.json')
-        with open(temp_file.name, 'w') as f:
-            json.dump(client_secret_data, f)
-        
-        client_secret = temp_file.name
-        st.success(f"클라이언트 시크릿을 임시 파일에 저장했습니다: {client_secret}")
-    
-    # Secrets 정보로 업로더 초기화
-    youtube_uploader = YouTubeUploader(
-        client_secret_file=client_secret,
-        progress_callback=update_progress
-    )
-    
-except ImportError as e:
-    st.error(f"YouTubeUploader 임포트 실패: {e}")
-    
-    from content_extractor import ContentExtractor
-    from pexels_downloader import PexelsVideoDownloader
-    from jamendo_music_provider import JamendoMusicProvider
-    from thumbnail_generator import ThumbnailGenerator
-    from config import config, get_api_key
-except ImportError as e:
-    st.error(f"모듈 가져오기 오류: {e}")
-    st.error("필요한 모듈이 설치되지 않았거나 경로가 올바르지 않습니다.")
 
 # 인터넷 연결 확인 함수 추가
 def check_internet_connection():
@@ -102,6 +64,123 @@ LOG_DIR = os.path.join(BASE_DIR, "logs")
 # 디렉토리 생성
 for directory in [OUTPUT_DIR, TTS_DIR, SCRIPT_DIR, BG_VIDEO_DIR, BG_MUSIC_DIR, THUMBNAIL_DIR, CACHE_DIR, LOG_DIR]:
     os.makedirs(directory, exist_ok=True)
+
+# 진행 상황 업데이트 함수
+def update_progress(message, progress=None):
+    """Streamlit 진행 상황 업데이트"""
+    if 'progress_bar' in st.session_state and st.session_state.progress_bar is not None:
+        if progress is not None:
+            st.session_state.progress_bar.progress(progress / 100)
+            # 퍼센트 표시 추가
+            if 'progress_percent' in st.session_state and st.session_state.progress_percent is not None:
+                st.session_state.progress_percent.text(f"{int(progress)}%")
+        if message is not None and 'status_text' in st.session_state and st.session_state.status_text is not None:
+            st.session_state.status_text.markdown(message)
+    else:
+        if message is not None:  # message가 None이 아닐 때만 표시
+            st.write(message)
+    
+    # 로깅 (None 메시지는 로깅하지 않음)
+    if message is not None:
+        logger.info(message)
+
+# 필요한 모듈 가져오기 - 모듈별 개별 임포트 시도
+try:
+    from video_creator import VideoCreator
+    logger.info("VideoCreator 모듈 로드 성공")
+except ImportError as e:
+    logger.error(f"VideoCreator 모듈 로드 실패: {e}")
+    st.error(f"VideoCreator 모듈 로드 실패: {e}")
+
+try:
+    from tts_generator import TTSGenerator
+    logger.info("TTSGenerator 모듈 로드 성공")
+except ImportError as e:
+    logger.error(f"TTSGenerator 모듈 로드 실패: {e}")
+    st.error(f"TTSGenerator 모듈 로드 실패: {e}")
+
+# YouTubeUploader 모듈 동적 로드 시도
+try:
+    # 파일 경로 확인
+    youtube_uploader_path = os.path.join(script_dir, 'youtube_uploader.py')
+    if not os.path.exists(youtube_uploader_path):
+        logger.error(f"youtube_uploader.py 파일을 찾을 수 없습니다. 경로: {youtube_uploader_path}")
+        st.error(f"youtube_uploader.py 파일을 찾을 수 없습니다.")
+        # 대체 클래스 정의
+        class YouTubeUploader:
+            def __init__(self, *args, **kwargs):
+                self.credentials_file = None
+                logger.warning("YouTubeUploader 대체 클래스가 사용됩니다. 유튜브 업로드 기능이 제한됩니다.")
+                st.warning("YouTubeUploader 모듈을 찾을 수 없어 유튜브 업로드 기능이 제한됩니다.")
+    else:
+        # 동적 임포트 시도
+        spec = importlib.util.spec_from_file_location("youtube_uploader", youtube_uploader_path)
+        youtube_uploader_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(youtube_uploader_module)
+        YouTubeUploader = youtube_uploader_module.YouTubeUploader
+        logger.info("YouTubeUploader 모듈 동적 로드 성공")
+except Exception as e:
+    logger.error(f"YouTubeUploader 동적 로드 실패: {e}")
+    st.error(f"YouTubeUploader 모듈 로드 실패: {e}")
+    # 대체 클래스 정의
+    class YouTubeUploader:
+        def __init__(self, *args, **kwargs):
+            self.credentials_file = None
+            logger.warning("YouTubeUploader 대체 클래스가 사용됩니다. 유튜브 업로드 기능이 제한됩니다.")
+            st.warning("YouTubeUploader 로드 실패로 유튜브 업로드 기능이 제한됩니다.")
+
+try:
+    from content_extractor import ContentExtractor
+    logger.info("ContentExtractor 모듈 로드 성공")
+except ImportError as e:
+    logger.error(f"ContentExtractor 모듈 로드 실패: {e}")
+    st.error(f"ContentExtractor 모듈 로드 실패: {e}")
+
+try:
+    from pexels_downloader import PexelsVideoDownloader
+    logger.info("PexelsVideoDownloader 모듈 로드 성공")
+except ImportError as e:
+    logger.error(f"PexelsVideoDownloader 모듈 로드 실패: {e}")
+    st.error(f"PexelsVideoDownloader 모듈 로드 실패: {e}")
+
+try:
+    from jamendo_music_provider import JamendoMusicProvider
+    logger.info("JamendoMusicProvider 모듈 로드 성공")
+except ImportError as e:
+    logger.error(f"JamendoMusicProvider 모듈 로드 실패: {e}")
+    st.error(f"JamendoMusicProvider 모듈 로드 실패: {e}")
+
+try:
+    from thumbnail_generator import ThumbnailGenerator
+    logger.info("ThumbnailGenerator 모듈 로드 성공")
+except ImportError as e:
+    logger.error(f"ThumbnailGenerator 모듈 로드 실패: {e}")
+    st.error(f"ThumbnailGenerator 모듈 로드 실패: {e}")
+
+try:
+    from config import config, get_api_key
+    logger.info("Config 모듈 로드 성공")
+except ImportError as e:
+    logger.error(f"Config 모듈 로드 실패: {e}")
+    st.error(f"Config 모듈 로드 실패: {e}")
+
+# Secrets에서 클라이언트 시크릿 정보 가져오기
+client_secret = None
+if 'google_api' in st.secrets and 'client_secret' in st.secrets['google_api']:
+    # Secrets에서 클라이언트 시크릿 정보를 임시 파일로 저장
+    try:
+        import tempfile
+        client_secret_data = st.secrets['google_api']['client_secret']
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.json')
+        with open(temp_file.name, 'w') as f:
+            json.dump(client_secret_data, f)
+        
+        client_secret = temp_file.name
+        logger.info(f"클라이언트 시크릿을 임시 파일에 저장했습니다: {client_secret}")
+        st.success(f"클라이언트 시크릿을 임시 파일에 저장했습니다: {client_secret}")
+    except Exception as e:
+        logger.error(f"클라이언트 시크릿 저장 실패: {e}")
+        st.error(f"클라이언트 시크릿 저장 실패: {e}")
 
 # CSS 스타일 적용
 st.markdown("""
@@ -440,25 +519,6 @@ def fetch_background_music(keywords, duration=60):
 
 # 앱 시작 시 API 설정 로드
 load_api_settings()
-
-# 진행 상황 업데이트 함수
-def update_progress(message, progress=None):
-    """Streamlit 진행 상황 업데이트"""
-    if 'progress_bar' in st.session_state and st.session_state.progress_bar is not None:
-        if progress is not None:
-            st.session_state.progress_bar.progress(progress / 100)
-            # 퍼센트 표시 추가
-            if 'progress_percent' in st.session_state and st.session_state.progress_percent is not None:
-                st.session_state.progress_percent.text(f"{int(progress)}%")
-        if message is not None and 'status_text' in st.session_state and st.session_state.status_text is not None:
-            st.session_state.status_text.markdown(message)
-    else:
-        if message is not None:  # message가 None이 아닐 때만 표시
-            st.write(message)
-    
-    # 로깅 (None 메시지는 로깅하지 않음)
-    if message is not None:
-        logger.info(message)
 
 def estimate_speech_duration(text):
     """
