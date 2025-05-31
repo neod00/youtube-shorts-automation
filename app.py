@@ -1,4 +1,11 @@
 import streamlit as st
+st.set_page_config(
+    page_title="YouTube Shorts 자동화 생성기",
+    page_icon="🎬",
+    layout="wide"
+)
+
+# 그 이후에 나머지 streamlit 관련 코드 작성
 import os
 import time
 import subprocess
@@ -70,14 +77,6 @@ LOG_DIR = os.path.join(BASE_DIR, "logs")
 # 디렉토리 생성
 for directory in [OUTPUT_DIR, TTS_DIR, SCRIPT_DIR, BG_VIDEO_DIR, BG_MUSIC_DIR, THUMBNAIL_DIR, CACHE_DIR, LOG_DIR]:
     os.makedirs(directory, exist_ok=True)
-
-# 앱 제목과 설정
-st.set_page_config(
-    page_title="YouTube Shorts 자동화 생성기",
-    page_icon="🎬",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # CSS 스타일 적용
 st.markdown("""
