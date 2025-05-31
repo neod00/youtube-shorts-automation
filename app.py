@@ -40,6 +40,31 @@ try:
     from video_creator import VideoCreator
     from tts_generator import TTSGenerator
     from youtube_uploader import YouTubeUploader
+    
+    # Secrets에서 클라이언트 시크릿 정보 가져오기
+    client_secret = None
+    if 'google_api' in st.secrets and 'client_secret' in st.secrets['google_api']:
+        # Secrets에서 클라이언트 시크릿 정보를 임시 파일로 저장
+        import json
+        import tempfile
+        
+        client_secret_data = st.secrets['google_api']['client_secret']
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.json')
+        with open(temp_file.name, 'w') as f:
+            json.dump(client_secret_data, f)
+        
+        client_secret = temp_file.name
+        st.success(f"클라이언트 시크릿을 임시 파일에 저장했습니다: {client_secret}")
+    
+    # Secrets 정보로 업로더 초기화
+    youtube_uploader = YouTubeUploader(
+        client_secret_file=client_secret,
+        progress_callback=update_progress
+    )
+    
+except ImportError as e:
+    st.error(f"YouTubeUploader 임포트 실패: {e}")
+    
     from content_extractor import ContentExtractor
     from pexels_downloader import PexelsVideoDownloader
     from jamendo_music_provider import JamendoMusicProvider
