@@ -22,10 +22,20 @@ import socket
 import re
 import importlib.util
 
-# app-git.py 파일 상단에 추가
+import nltk
+
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    filename='streamlit_app.log',
+    filemode='a'
+)
+
+logger = logging.getLogger('app')
+
+# NLTK 리소스 다운로드 - 로깅 설정 이후에 배치
 try:
-    import nltk
-    
     # 필요한 NLTK 리소스 다운로드
     nltk.download('punkt')
     nltk.download('averaged_perceptron_tagger')
@@ -44,15 +54,6 @@ except Exception as e:
     logger.error(f"NLTK 리소스 다운로드 실패: {e}")
     st.error(f"NLTK 리소스 다운로드 실패: {e}")
 
-# 로깅 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    filename='streamlit_app.log',
-    filemode='a'
-)
-
-logger = logging.getLogger('app')
 
 # 모듈 경로 설정
 script_dir = os.path.dirname(os.path.abspath(__file__))
