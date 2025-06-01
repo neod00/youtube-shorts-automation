@@ -4,7 +4,9 @@ pillow>=7.1.0,<10
 numpy
 requests
 Pillow
-moviepy
+moviepy==1.0.3
+imageio
+tqdm
 google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
