@@ -42,6 +42,7 @@ class TTSGenerator:
         self.progress_callback = progress_callback
         self.use_stt_for_subtitles = use_stt_for_subtitles
         self.error_messages = []  # 에러 메시지를 저장할 리스트
+        self.temp_credentials_file = None  # 임시 인증 파일 경로
         
         # 출력 디렉토리 설정
         if output_dir:
@@ -56,8 +57,16 @@ class TTSGenerator:
         if self.tts_engine == "google":
             try:
                 from google.cloud import texttospeech_v1 as texttospeech
-                self.client = texttospeech.TextToSpeechClient()
-                logger.info("Google Cloud TTS 클라이언트 초기화 완료")
+                
+                # 인증 설정 (Streamlit Cloud 환경 고려)
+                credentials_set = self._setup_google_credentials()
+                
+                if credentials_set:
+                    self.client = texttospeech.TextToSpeechClient()
+                    logger.info("Google Cloud TTS 클라이언트 초기화 완료")
+                else:
+                    logger.error("Google Cloud 인증 설정 실패")
+                    self.error_messages.append("Google Cloud 인증 설정에 실패했습니다. 환경 변수 또는 Streamlit Secrets 설정을 확인하세요.")
             except ImportError:
                 logger.error("Google Cloud TTS 라이브러리가 설치되지 않았습니다.")
                 self.error_messages.append("Google Cloud TTS 라이브러리가 설치되지 않았습니다. pip install google-cloud-texttospeech 명령으로 설치하세요.")
@@ -92,12 +101,92 @@ class TTSGenerator:
         if self.use_stt_for_subtitles:
             try:
                 from google.cloud import speech_v1p1beta1 as speech
+                # 인증 설정은 위에서 이미 처리됨
                 self.speech_client = speech.SpeechClient()
                 logger.info("Google Cloud Speech 클라이언트 초기화 완료")
             except ImportError:
                 logger.error("Google Cloud Speech 라이브러리가 설치되지 않았습니다.")
                 self.error_messages.append("Google Cloud Speech 라이브러리가 설치되지 않았습니다. pip install google-cloud-speech 명령으로 설치하세요.")
                 self.use_stt_for_subtitles = False
+    
+    def _setup_google_credentials(self):
+        """
+        Google Cloud 인증 설정
+        
+        환경 변수 또는 Streamlit Secrets에서 서비스 계정 키를 가져와 설정
+        
+        Returns:
+            bool: 인증 설정 성공 여부
+        """
+        # 1. 환경 변수 GOOGLE_APPLICATION_CREDENTIALS 확인
+        if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
+            cred_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+            if os.path.exists(cred_path):
+                logger.info(f"기존 환경 변수를 통한 인증 사용: {cred_path}")
+                return True
+            else:
+                logger.warning(f"환경 변수에 지정된 인증 파일이 존재하지 않음: {cred_path}")
+        
+        # 2. Streamlit Secrets에서 서비스 계정 키 가져오기 시도
+        try:
+            if hasattr(st, 'secrets') and 'gcp_service_account' in st.secrets:
+                # Secrets에서 서비스 계정 정보 가져오기
+                logger.info("Streamlit Secrets에서 서비스 계정 정보 로드 중...")
+                
+                # 임시 파일 생성
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
+                    # 서비스 계정 정보를 임시 파일에 쓰기
+                    json.dump(st.secrets['gcp_service_account'], temp_file)
+                    temp_file_path = temp_file.name
+                
+                # 임시 파일 경로를 환경 변수에 설정
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_file_path
+                self.temp_credentials_file = temp_file_path  # 나중에 정리하기 위해 저장
+                
+                logger.info(f"임시 서비스 계정 키 파일 생성 및 환경 변수 설정 완료: {temp_file_path}")
+                return True
+                
+            # 3. api_key 매개변수가 제공된 경우 (JSON 문자열 형태일 수 있음)
+            elif self.api_key and (self.api_key.startswith('{') or os.path.exists(self.api_key)):
+                try:
+                    if os.path.exists(self.api_key):
+                        # 파일 경로인 경우 직접 환경 변수에 설정
+                        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = self.api_key
+                        logger.info(f"API 키 파일 경로를 환경 변수에 설정: {self.api_key}")
+                        return True
+                    else:
+                        # JSON 문자열인 경우 임시 파일로 저장
+                        service_account_info = json.loads(self.api_key)
+                        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
+                            json.dump(service_account_info, temp_file)
+                            temp_file_path = temp_file.name
+                        
+                        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_file_path
+                        self.temp_credentials_file = temp_file_path
+                        
+                        logger.info(f"API 키 JSON에서 임시 서비스 계정 키 파일 생성: {temp_file_path}")
+                        return True
+                except Exception as e:
+                    logger.error(f"API 키 처리 중 오류: {str(e)}")
+                    
+        except Exception as e:
+            logger.error(f"서비스 계정 키 설정 중 오류: {str(e)}")
+        
+        # 인증 설정 실패
+        logger.error("Google Cloud 인증 설정 실패. 환경 변수나 Streamlit Secrets에 서비스 계정 키가 없습니다.")
+        self.error_messages.append("Google Cloud 인증 정보를 찾을 수 없습니다. 환경 변수 GOOGLE_APPLICATION_CREDENTIALS 설정 또는 Streamlit Secrets 설정이 필요합니다.")
+        return False
+    
+    def __del__(self):
+        """
+        객체 소멸 시 임시 파일 정리
+        """
+        if hasattr(self, 'temp_credentials_file') and self.temp_credentials_file and os.path.exists(self.temp_credentials_file):
+            try:
+                os.remove(self.temp_credentials_file)
+                logger.info(f"임시 인증 파일 삭제 완료: {self.temp_credentials_file}")
+            except Exception as e:
+                logger.error(f"임시 인증 파일 삭제 중 오류: {str(e)}")
     
     def update_progress(self, message, progress_value=None):
         """진행 상황 업데이트 (Streamlit 사용 시)"""
